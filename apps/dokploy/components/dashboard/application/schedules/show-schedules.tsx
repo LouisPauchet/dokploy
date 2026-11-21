@@ -151,6 +151,19 @@ export const ShowSchedules = ({ id, scheduleType = "application" }: Props) => {
 															</Badge>
 														</>
 													)}
+												{schedule.timeout && (
+													<>
+														<span className="text-xs text-muted-foreground/50">
+															•
+														</span>
+														<Badge
+															variant="outline"
+															className="font-mono text-[10px] bg-transparent"
+														>
+															Timeout: {schedule.timeout}s
+														</Badge>
+													</>
+												)}
 											</div>
 											{schedule.command && (
 												<div className="flex items-start gap-2 max-w-full">

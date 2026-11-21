@@ -94,6 +94,7 @@ const formSchema = z
 		]),
 		script: z.string(),
 		timezone: z.string().optional(),
+		timeout: z.number().int().positive().nullable().optional(),
 	})
 	.superRefine((data, ctx) => {
 		if (data.scheduleType === "compose" && !data.serviceName) {
@@ -234,6 +235,7 @@ export const HandleSchedules = ({ id, scheduleId, scheduleType }: Props) => {
 			scheduleType: scheduleType || "application",
 			script: "",
 			timezone: undefined,
+			timeout: null,
 		},
 	});
 
@@ -274,6 +276,7 @@ export const HandleSchedules = ({ id, scheduleId, scheduleType }: Props) => {
 				scheduleType: schedule.scheduleType,
 				script: schedule.script || "",
 				timezone: schedule.timezone || undefined,
+				timeout: schedule.timeout,
 			});
 		}
 	}, [form, schedule, scheduleId]);
@@ -665,6 +668,33 @@ echo "Hello, world!"
 								)}
 							/>
 						)}
+
+						<FormField
+							control={form.control}
+							name="timeout"
+							render={({ field }) => (
+								<FormItem>
+									<FormLabel>Timeout (seconds)</FormLabel>
+									<FormControl>
+										<Input
+											type="number"
+											min={1}
+											placeholder="No timeout"
+											value={field.value ?? ""}
+											onChange={(e) => {
+												const value = e.target.value;
+												field.onChange(value === "" ? null : Number(value));
+											}}
+										/>
+									</FormControl>
+									<FormDescription>
+										Optional: stop the run and mark it as failed after this many
+										seconds
+									</FormDescription>
+									<FormMessage />
+								</FormItem>
+							)}
+						/>
 
 						<FormField
 							control={form.control}
