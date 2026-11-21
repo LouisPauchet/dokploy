@@ -83,6 +83,7 @@ const formSchema = z
 		description: z.string().optional(),
 		cronExpression: z.string().min(1, "Cron expression is required"),
 		shellType: z.enum(["bash", "sh"]).default("bash"),
+		executionMode: z.enum(["exec", "run", "start"]).default("exec"),
 		command: z.string(),
 		enabled: z.boolean().default(true),
 		serviceName: z.string(),
@@ -120,6 +121,7 @@ const formSchema = z
 		if (
 			(data.scheduleType === "application" ||
 				data.scheduleType === "compose") &&
+			data.executionMode === "exec" &&
 			!data.command
 		) {
 			ctx.addIssue({
@@ -229,6 +231,7 @@ export const HandleSchedules = ({ id, scheduleId, scheduleType }: Props) => {
 			description: "",
 			cronExpression: "",
 			shellType: "bash",
+			executionMode: "exec",
 			command: "",
 			enabled: true,
 			serviceName: "",
@@ -240,6 +243,7 @@ export const HandleSchedules = ({ id, scheduleId, scheduleType }: Props) => {
 	});
 
 	const scheduleTypeForm = form.watch("scheduleType");
+	const executionModeForm = form.watch("executionMode");
 
 	const { data: schedule } = api.schedule.one.useQuery(
 		{ scheduleId: scheduleId || "" },
@@ -270,6 +274,7 @@ export const HandleSchedules = ({ id, scheduleId, scheduleType }: Props) => {
 				description: schedule.description || "",
 				cronExpression: schedule.cronExpression,
 				shellType: schedule.shellType,
+				executionMode: schedule.executionMode,
 				command: schedule.command,
 				enabled: schedule.enabled,
 				serviceName: schedule.serviceName || "",
@@ -590,58 +595,100 @@ export const HandleSchedules = ({ id, scheduleId, scheduleType }: Props) => {
 							)}
 						/>
 
-						{(scheduleTypeForm === "application" ||
-							scheduleTypeForm === "compose") && (
-							<>
-								<FormField
-									control={form.control}
-									name="shellType"
-									render={({ field }) => (
-										<FormItem>
-											<FormLabel className="flex items-center gap-2">
-												Shell Type
-											</FormLabel>
-											<Select
-												onValueChange={field.onChange}
-												defaultValue={field.value}
-											>
-												<FormControl>
-													<SelectTrigger>
-														<SelectValue placeholder="Select shell type" />
-													</SelectTrigger>
-												</FormControl>
-												<SelectContent>
-													<SelectItem value="bash">Bash</SelectItem>
-													<SelectItem value="sh">Sh</SelectItem>
-												</SelectContent>
-											</Select>
-											<FormDescription>
-												Choose the shell to execute your command
-											</FormDescription>
-											<FormMessage />
-										</FormItem>
-									)}
-								/>
-								<FormField
-									control={form.control}
-									name="command"
-									render={({ field }) => (
-										<FormItem>
-											<FormLabel className="flex items-center gap-2">
-												Command
-											</FormLabel>
+						{scheduleTypeForm === "compose" && (
+							<FormField
+								control={form.control}
+								name="executionMode"
+								render={({ field }) => (
+									<FormItem>
+										<FormLabel>Execution Mode</FormLabel>
+										<Select onValueChange={field.onChange} value={field.value}>
 											<FormControl>
-												<Input placeholder="npm run backup" {...field} />
+												<SelectTrigger>
+													<SelectValue placeholder="Select execution mode" />
+												</SelectTrigger>
 											</FormControl>
-											<FormDescription>
-												The command to execute in your container
-											</FormDescription>
-											<FormMessage />
-										</FormItem>
-									)}
-								/>
-							</>
+											<SelectContent>
+												<SelectItem value="exec">
+													Exec in running container
+												</SelectItem>
+												<SelectItem value="run">
+													Run a fresh container
+												</SelectItem>
+												<SelectItem value="start">
+													Start existing container
+												</SelectItem>
+											</SelectContent>
+										</Select>
+										<FormDescription>
+											Run and start launch the service container on schedule and
+											wait for it to exit
+										</FormDescription>
+										<FormMessage />
+									</FormItem>
+								)}
+							/>
 						)}
+
+						{(scheduleTypeForm === "application" ||
+							scheduleTypeForm === "compose") &&
+							executionModeForm !== "start" && (
+								<>
+									{executionModeForm === "exec" && (
+										<FormField
+											control={form.control}
+											name="shellType"
+											render={({ field }) => (
+												<FormItem>
+													<FormLabel className="flex items-center gap-2">
+														Shell Type
+													</FormLabel>
+													<Select
+														onValueChange={field.onChange}
+														defaultValue={field.value}
+													>
+														<FormControl>
+															<SelectTrigger>
+																<SelectValue placeholder="Select shell type" />
+															</SelectTrigger>
+														</FormControl>
+														<SelectContent>
+															<SelectItem value="bash">Bash</SelectItem>
+															<SelectItem value="sh">Sh</SelectItem>
+														</SelectContent>
+													</Select>
+													<FormDescription>
+														Choose the shell to execute your command
+													</FormDescription>
+													<FormMessage />
+												</FormItem>
+											)}
+										/>
+									)}
+									<FormField
+										control={form.control}
+										name="command"
+										render={({ field }) => (
+											<FormItem>
+												<FormLabel className="flex items-center gap-2">
+													{executionModeForm === "run"
+														? "Command Override"
+														: "Command"}
+												</FormLabel>
+												<FormControl>
+													<Input placeholder="npm run backup" {...field} />
+												</FormControl>
+												<FormDescription>
+													{executionModeForm === "run"
+														? "Optional: replaces the service command in the new container"
+														: "The command to execute in your container"}
+												</FormDescription>
+												<FormMessage />
+											</FormItem>
+										)}
+									/>
+								</>
+							)}
 
 						{(scheduleTypeForm === "dokploy-server" ||
 							scheduleTypeForm === "server") && (

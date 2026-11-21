@@ -147,7 +147,9 @@ export const ShowSchedules = ({ id, scheduleType = "application" }: Props) => {
 																variant="outline"
 																className="font-mono text-[10px] bg-transparent"
 															>
-																{schedule.shellType}
+																{schedule.executionMode === "exec"
+																	? schedule.shellType
+																	: schedule.executionMode}
 															</Badge>
 														</>
 													)}
