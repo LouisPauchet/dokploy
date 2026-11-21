@@ -15,6 +15,7 @@ import { cloneGiteaRepository } from "../providers/gitea";
 import { cloneGithubRepository } from "../providers/github";
 import { cloneGitlabRepository } from "../providers/gitlab";
 import { getCreateComposeFileCommand } from "../providers/raw";
+import { applyScheduleJobDefaults } from "../schedules/labels";
 import { randomizeDeployableSpecificationFile } from "./collision";
 import { randomizeSpecificationFile } from "./compose";
 import { buildDokployLabels } from "./dokploy-labels";
@@ -306,6 +307,8 @@ export const addDomainToCompose = async (
 		const randomized = randomizeSpecificationFile(result, compose.suffix);
 		result = randomized;
 	}
+
+	applyScheduleJobDefaults(result, compose.composeType);
 
 	for (const domain of domains) {
 		for (const service of Object.values(result.services ?? {})) {
