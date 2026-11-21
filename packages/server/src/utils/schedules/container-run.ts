@@ -29,9 +29,14 @@ echo "✅ Command executed successfully" >> ${log};`;
 };
 
 // The command override is user input, so it is split into words and re-quoted
-// instead of being interpolated into the host shell.
+// instead of being interpolated into the host shell. Variables are kept as
+// written so the shell in the container expands them, not shell-quote.
 const toArgs = (command: string) =>
-	quote(parse(command).filter((arg): arg is string => typeof arg === "string"));
+	quote(
+		parse(command, (name) => `\${${name}}`).filter(
+			(arg): arg is string => typeof arg === "string",
+		),
+	);
 
 export const getComposeRunCommand = ({
 	compose,

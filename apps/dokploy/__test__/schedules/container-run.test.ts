@@ -74,6 +74,20 @@ describe("getComposeRunCommand", () => {
 		expect(script).not.toContain("; rm -rf /");
 	});
 
+	it("leaves variables of the override for the container shell to expand", () => {
+		const script = getComposeRunCommand({
+			...base,
+			timeout: null,
+			command: 'sh -c "echo $HOSTNAME ${BACKUP_DIR:-/data}"',
+			runId: "dep1",
+			deployed: null,
+		});
+
+		expect(script).toContain(
+			"backup sh -c 'echo ${HOSTNAME} ${BACKUP_DIR:-/data}'",
+		);
+	});
+
 	it("wraps the run with a timeout that removes the container", () => {
 		const script = getComposeRunCommand({
 			...base,
