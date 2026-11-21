@@ -2,6 +2,7 @@ import type { Compose } from "@dokploy/server/services/compose";
 import {
 	getComposeRunCommand,
 	getComposeStartCommand,
+	getStackTaskCommand,
 } from "@dokploy/server/utils/schedules/container-run";
 import { describe, expect, it } from "vitest";
 
@@ -97,5 +98,41 @@ describe("getComposeStartCommand", () => {
 		);
 		expect(script).toContain('timeout -k 10 60 docker start -a "$id"');
 		expect(script).toContain('docker stop -t 10 "$id"');
+	});
+});
+
+describe("getStackTaskCommand", () => {
+	const stack = {
+		...base,
+		compose: { ...compose, composeType: "stack" } as Compose,
+	};
+
+	it("scales the service up for one task and back down in run mode", () => {
+		const script = getStackTaskCommand({
+			...stack,
+			timeout: null,
+			mode: "run",
+		});
+
+		expect(script).toContain("docker service scale -d shop-abc123_backup=1");
+		expect(script).toContain(
+			"docker service scale -d shop-abc123_backup=0 >/dev/null 2>&1 || true",
+		);
+		expect(script).toContain('docker service logs --raw --no-trunc "$task"');
+	});
+
+	it("forces a new task of the existing service in start mode", () => {
+		const script = getStackTaskCommand({
+			...stack,
+			timeout: 45,
+			mode: "start",
+		});
+
+		expect(script).toContain(
+			"docker service update --force -d shop-abc123_backup",
+		);
+		expect(script).toContain('OLD="$old" timeout -k 10 45 sh -c');
+		// Only the timeout cleanup scales a started service down.
+		expect(script.match(/shop-abc123_backup=0/g)).toHaveLength(1);
 	});
 });

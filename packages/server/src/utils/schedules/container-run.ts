@@ -114,3 +114,54 @@ fi
 echo "Starting container $id" >> ${log};
 ${runWithTimeout(`docker start -a "$id"`, { timeout, logPath }, `docker stop -t 10 "$id" >/dev/null 2>&1 || true`)}`;
 };
+
+// Polls until the newest task of the service ($0) is not the task that existed
+// before the trigger ($OLD) and has reached a terminal state.
+const STACK_TASK_WAIT_LOOP = `while :; do
+	set -- $(docker service ps --no-trunc --format "{{.ID}} {{.CurrentState}}" "$0" | head -n 1)
+	if [ "$1" != "$OLD" ]; then
+		case "$2" in Complete|Failed|Rejected|Shutdown|Orphaned) exit 0;; esac
+	fi
+	sleep 2
+done`;
+
+export const getStackTaskCommand = ({
+	compose,
+	serviceName,
+	timeout,
+	logPath,
+	mode,
+}: ContainerRunInput & { mode: "run" | "start" }) => {
+	const log = quote([logPath]);
+	const service = quote([`${compose.appName}_${serviceName}`]);
+	const scaleDown = `docker service scale -d ${service}=0 >/dev/null 2>&1 || true`;
+	// After a timeout scaled it to 0, a forced update would not start any task.
+	const trigger =
+		mode === "run"
+			? `docker service scale -d ${service}=1 >/dev/null`
+			: `if [ "$(docker service inspect -f '{{.Spec.Mode.Replicated.Replicas}}' ${service})" = "0" ]; then
+	docker service scale -d ${service}=1 >/dev/null
+else
+	docker service update --force -d ${service} >/dev/null
+fi`;
+
+	return `set -e
+old=$(docker service ps -q ${service} | head -n 1)
+echo ${quote([`Starting a task of service '${serviceName}'`])} >> ${log};
+${trigger}
+OLD="$old" ${getTimeoutArgs(timeout).join(" ")} sh -c ${quote([STACK_TASK_WAIT_LOOP])} ${service} || {
+	code=$?;
+	${getShellTimeoutCheck(timeout, logPath, scaleDown)}
+	echo "❌ Command failed" >> ${log};
+	exit 1;
+}
+task=$(docker service ps -q ${service} | head -n 1)
+docker service logs --raw --no-trunc "$task" >> ${log} 2>&1 || true
+code=$(docker inspect -f '{{.Status.ContainerStatus.ExitCode}}' "$task" 2>/dev/null || echo "unknown")
+${mode === "run" ? scaleDown : ""}
+if [ "$code" != "0" ]; then
+	echo "❌ Command failed (exit code $code)" >> ${log};
+	exit 1;
+fi
+echo "✅ Command executed successfully" >> ${log};`;
+};

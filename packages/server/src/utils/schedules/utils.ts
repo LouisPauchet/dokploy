@@ -18,7 +18,11 @@ import {
 import { getComposeContainer, getServiceContainer } from "../docker/utils";
 import { execAsync, execAsyncRemote } from "../process/execAsync";
 import { spawnAsync } from "../process/spawnAsync";
-import { getComposeRunCommand, getComposeStartCommand } from "./container-run";
+import {
+	getComposeRunCommand,
+	getComposeStartCommand,
+	getStackTaskCommand,
+} from "./container-run";
 import {
 	getShellTimeoutCheck,
 	getTimeoutArgs,
@@ -73,6 +77,15 @@ const runComposeContainer = async ({
 	};
 	const input = { compose, serviceName, timeout, logPath: deployment.logPath };
 
+	if (compose.composeType === "stack") {
+		await runShell(
+			getStackTaskCommand({
+				...input,
+				mode: executionMode === "start" ? "start" : "run",
+			}),
+		);
+		return;
+	}
 	if (executionMode === "start") {
 		await runShell(getComposeStartCommand(input));
 		return;
