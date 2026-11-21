@@ -135,4 +135,23 @@ describe("getStackTaskCommand", () => {
 		// Only the timeout cleanup scales a started service down.
 		expect(script.match(/shop-abc123_backup=0/g)).toHaveLength(1);
 	});
+
+	it("waits for a task being removed and refuses to overlap a running one", () => {
+		const script = getStackTaskCommand({
+			...stack,
+			timeout: null,
+			mode: "run",
+		});
+		const trigger = script.indexOf(
+			"docker service scale -d shop-abc123_backup=1",
+		);
+
+		expect(
+			script.indexOf("--filter desired-state=running shop-abc123_backup"),
+		).toBeLessThan(trigger);
+		expect(
+			script.indexOf("--filter desired-state=remove shop-abc123_backup"),
+		).toBeLessThan(trigger);
+		expect(script).toContain("is still running from a previous run");
+	});
 });

@@ -145,7 +145,23 @@ else
 	docker service update --force -d ${service} >/dev/null
 fi`;
 
+	// A task scaled down after a timeout stays in its slot until its stop grace
+	// period ends, and a scale up during that window never gets a new task when
+	// the restart policy is "none".
 	return `set -e
+if [ -n "$(docker service ps -q --filter desired-state=running ${service})" ]; then
+	echo ${quote([`❌ A task of service '${serviceName}' is still running from a previous run`])} >> ${log};
+	exit 1;
+fi
+n=0
+while [ -n "$(docker service ps -q --filter desired-state=remove ${service})" ]; do
+	n=$((n + 1))
+	if [ "$n" -gt 60 ]; then
+		echo ${quote([`❌ The previous task of service '${serviceName}' is still being removed`])} >> ${log};
+		exit 1;
+	fi
+	sleep 2
+done
 old=$(docker service ps -q ${service} | head -n 1)
 echo ${quote([`Starting a task of service '${serviceName}'`])} >> ${log};
 ${trigger}
