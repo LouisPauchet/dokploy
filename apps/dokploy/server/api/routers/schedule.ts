@@ -15,6 +15,7 @@ import {
 import {
 	assertExecutionModeAllowed,
 	assertHostScheduleAccess,
+	assertNotLabelManaged,
 	createSchedule,
 	deleteSchedule,
 	findScheduleById,
@@ -91,6 +92,7 @@ export const scheduleRouter = createTRPCRouter({
 		.input(updateScheduleSchema)
 		.mutation(async ({ input, ctx }) => {
 			const existingSchedule = await findScheduleById(input.scheduleId);
+			assertNotLabelManaged(existingSchedule);
 
 			if (
 				IS_CLOUD &&
@@ -171,6 +173,7 @@ export const scheduleRouter = createTRPCRouter({
 		.input(z.object({ scheduleId: z.string() }))
 		.mutation(async ({ input, ctx }) => {
 			const scheduleItem = await findScheduleById(input.scheduleId);
+			assertNotLabelManaged(scheduleItem);
 			await assertHostScheduleAccess(
 				ctx,
 				scheduleItem.scheduleType,

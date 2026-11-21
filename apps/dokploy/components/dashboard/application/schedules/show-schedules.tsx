@@ -124,6 +124,24 @@ export const ShowSchedules = ({ id, scheduleType = "application" }: Props) => {
 												>
 													{schedule.enabled ? "Enabled" : "Disabled"}
 												</Badge>
+												{schedule.source === "label" && (
+													<TooltipProvider delayDuration={0}>
+														<Tooltip>
+															<TooltipTrigger asChild>
+																<Badge
+																	variant="outline"
+																	className="text-[10px] px-1 py-0"
+																>
+																	Managed by labels
+																</Badge>
+															</TooltipTrigger>
+															<TooltipContent>
+																Defined by the dokploy.schedule.* labels of the
+																service, edit the compose file to change it
+															</TooltipContent>
+														</Tooltip>
+													</TooltipProvider>
+												)}
 											</div>
 											{schedule.description && (
 												<p className="text-xs text-muted-foreground/70 wrap-anywhere line-clamp-2">
@@ -209,40 +227,44 @@ export const ShowSchedules = ({ id, scheduleType = "application" }: Props) => {
 												<TooltipContent>Run Manual Schedule</TooltipContent>
 											</Tooltip>
 										</TooltipProvider>
-										<HandleSchedules
-											scheduleId={schedule.scheduleId}
-											id={id}
-											scheduleType={scheduleType}
-										/>
-										<DialogAction
-											title="Delete Schedule"
-											description="Are you sure you want to delete this schedule?"
-											type="destructive"
-											onClick={async () => {
-												await deleteSchedule({
-													scheduleId: schedule.scheduleId,
-												})
-													.then(() => {
-														utils.schedule.list.invalidate({
-															id,
-															scheduleType,
-														});
-														toast.success("Schedule deleted successfully");
-													})
-													.catch(() => {
-														toast.error("Error deleting schedule");
-													});
-											}}
-										>
-											<Button
-												variant="ghost"
-												size="icon"
-												className="group hover:bg-red-500/10"
-												disabled={isDeleting}
-											>
-												<Trash2 className="size-4 text-primary group-hover:text-red-500" />
-											</Button>
-										</DialogAction>
+										{schedule.source !== "label" && (
+											<>
+												<HandleSchedules
+													scheduleId={schedule.scheduleId}
+													id={id}
+													scheduleType={scheduleType}
+												/>
+												<DialogAction
+													title="Delete Schedule"
+													description="Are you sure you want to delete this schedule?"
+													type="destructive"
+													onClick={async () => {
+														await deleteSchedule({
+															scheduleId: schedule.scheduleId,
+														})
+															.then(() => {
+																utils.schedule.list.invalidate({
+																	id,
+																	scheduleType,
+																});
+																toast.success("Schedule deleted successfully");
+															})
+															.catch(() => {
+																toast.error("Error deleting schedule");
+															});
+													}}
+												>
+													<Button
+														variant="ghost"
+														size="icon"
+														className="group hover:bg-red-500/10"
+														disabled={isDeleting}
+													>
+														<Trash2 className="size-4 text-primary group-hover:text-red-500" />
+													</Button>
+												</DialogAction>
+											</>
+										)}
 									</div>
 								</div>
 							);

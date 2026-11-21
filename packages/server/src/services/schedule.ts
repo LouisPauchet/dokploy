@@ -69,6 +69,16 @@ export const assertExecutionModeAllowed = (
 	}
 };
 
+export const assertNotLabelManaged = (schedule: Pick<Schedule, "source">) => {
+	if (schedule.source === "label") {
+		throw new TRPCError({
+			code: "BAD_REQUEST",
+			message:
+				"This schedule is managed by compose labels, edit the compose file instead.",
+		});
+	}
+};
+
 export const createSchedule = async (
 	input: z.infer<typeof createScheduleSchema>,
 ) => {
