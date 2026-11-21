@@ -2,6 +2,7 @@ import { createWriteStream } from "node:fs";
 import path from "node:path";
 import { IS_CLOUD, paths } from "@dokploy/server/constants";
 import type { Schedule } from "@dokploy/server/db/schema/schedule";
+import type { Compose } from "@dokploy/server/services/compose";
 import {
 	createDeploymentSchedule,
 	updateDeployment,
@@ -10,9 +11,20 @@ import {
 import { findScheduleById } from "@dokploy/server/services/schedule";
 import { scheduledJobs, scheduleJob as scheduleJobNode } from "node-schedule";
 import { quote } from "shell-quote";
+import {
+	getDeployedComposeConfigCommand,
+	parseDeployedComposeConfig,
+} from "../builders/compose";
 import { getComposeContainer, getServiceContainer } from "../docker/utils";
-import { execAsyncRemote } from "../process/execAsync";
+import { execAsync, execAsyncRemote } from "../process/execAsync";
 import { spawnAsync } from "../process/spawnAsync";
+import { getComposeRunCommand, getComposeStartCommand } from "./container-run";
+import {
+	getShellTimeoutCheck,
+	getTimeoutArgs,
+	getTimeoutMessage,
+	isTimeoutError,
+} from "./timeout";
 
 export const scheduleJob = (schedule: Schedule) => {
 	const { cronExpression, scheduleId, timezone } = schedule;
@@ -32,26 +44,50 @@ export const scheduleJob = (schedule: Schedule) => {
 	);
 };
 
-// coreutils `timeout` exits 124 when it sends TERM and 137 when the -k grace period forces KILL.
-const TIMEOUT_EXIT_CODES = [124, 137];
-
-const getTimeoutArgs = (timeout: number | null) =>
-	timeout ? ["timeout", "-k", "10", String(timeout)] : [];
-
-const getTimeoutMessage = (timeout: number | null) =>
-	`⏱ Timed out after ${timeout}s`;
-
-const isTimeoutError = (error: unknown) =>
-	TIMEOUT_EXIT_CODES.includes((error as { code?: number })?.code ?? 0);
-
-const getShellTimeoutCheck = (timeout: number | null, logPath: string) =>
-	timeout
-		? `case $code in 124|137) echo ${quote([getTimeoutMessage(timeout)])} >> ${quote([logPath])};; esac`
-		: "";
-
 export const removeScheduleJob = (scheduleId: string) => {
 	const currentJob = scheduledJobs[scheduleId];
 	currentJob?.cancel();
+};
+
+const runComposeContainer = async ({
+	compose,
+	serviceName,
+	command,
+	executionMode,
+	timeout,
+	deployment,
+}: {
+	compose: Compose;
+	serviceName: string;
+	command: string;
+	executionMode: Schedule["executionMode"];
+	timeout: number | null;
+	deployment: { deploymentId: string; logPath: string };
+}) => {
+	const runShell = async (script: string) => {
+		if (compose.serverId) return execAsyncRemote(compose.serverId, script);
+		if (IS_CLOUD) {
+			throw new Error("This feature is not available in the cloud version.");
+		}
+		return execAsync(script);
+	};
+	const input = { compose, serviceName, timeout, logPath: deployment.logPath };
+
+	if (executionMode === "start") {
+		await runShell(getComposeStartCommand(input));
+		return;
+	}
+	const { stdout } = await runShell(
+		getDeployedComposeConfigCommand(compose.appName),
+	);
+	await runShell(
+		getComposeRunCommand({
+			...input,
+			command,
+			runId: deployment.deploymentId,
+			deployed: parseDeployedComposeConfig(stdout),
+		}),
+	);
 };
 
 export const runCommand = async (scheduleId: string) => {
@@ -65,6 +101,7 @@ export const runCommand = async (scheduleId: string) => {
 		appName,
 		serverId,
 		timeout,
+		executionMode,
 	} = await findScheduleById(scheduleId);
 	const timeoutPrefix = getTimeoutArgs(timeout).join(" ");
 
@@ -75,7 +112,16 @@ export const runCommand = async (scheduleId: string) => {
 	});
 
 	try {
-		if (scheduleType === "application" || scheduleType === "compose") {
+		if (scheduleType === "compose" && compose && executionMode !== "exec") {
+			await runComposeContainer({
+				compose,
+				serviceName: serviceName || "",
+				command,
+				executionMode,
+				timeout,
+				deployment,
+			});
+		} else if (scheduleType === "application" || scheduleType === "compose") {
 			let containerId = "";
 			let serverId = "";
 			if (scheduleType === "application" && application) {

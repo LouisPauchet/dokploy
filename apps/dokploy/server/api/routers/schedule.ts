@@ -13,6 +13,7 @@ import {
 	findMemberByUserId,
 } from "@dokploy/server/services/permission";
 import {
+	assertExecutionModeAllowed,
 	assertHostScheduleAccess,
 	createSchedule,
 	deleteSchedule,
@@ -33,6 +34,7 @@ export const scheduleRouter = createTRPCRouter({
 		.input(createScheduleSchema)
 		.mutation(async ({ input, ctx }) => {
 			await assertHostScheduleAccess(ctx, input.scheduleType, input.serverId);
+			assertExecutionModeAllowed(input.scheduleType, input.executionMode);
 
 			const serviceId = input.applicationId || input.composeId;
 			if (serviceId) {
@@ -116,6 +118,10 @@ export const scheduleRouter = createTRPCRouter({
 					input.serverId ?? existingSchedule.serverId,
 				);
 			}
+			assertExecutionModeAllowed(
+				input.scheduleType ?? existingSchedule.scheduleType,
+				input.executionMode,
+			);
 
 			const serviceId =
 				existingSchedule.applicationId || existingSchedule.composeId;

@@ -18,6 +18,12 @@ export const scheduleType = pgEnum("scheduleType", [
 	"dokploy-server",
 ]);
 
+export const scheduleExecutionMode = pgEnum("scheduleExecutionMode", [
+	"exec",
+	"run",
+	"start",
+]);
+
 export const schedules = pgTable("schedule", {
 	scheduleId: text("scheduleId")
 		.notNull()
@@ -32,6 +38,9 @@ export const schedules = pgTable("schedule", {
 	serviceName: text("serviceName"),
 	shellType: shellTypes("shellType").notNull().default("bash"),
 	scheduleType: scheduleType("scheduleType").notNull().default("application"),
+	executionMode: scheduleExecutionMode("executionMode")
+		.notNull()
+		.default("exec"),
 	command: text("command").notNull(),
 	script: text("script"),
 	applicationId: text("applicationId").references(
@@ -83,6 +92,7 @@ export const schedulesRelations = relations(schedules, ({ one, many }) => ({
 export const createScheduleSchema = createInsertSchema(schedules, {
 	scheduleType: z.enum(["application", "compose", "server", "dokploy-server"]),
 	timeout: z.number().int().positive().nullable().optional(),
+	executionMode: z.enum(["exec", "run", "start"]).optional(),
 }).omit({ appName: true, organizationId: true });
 
 export const updateScheduleSchema = createScheduleSchema.extend({

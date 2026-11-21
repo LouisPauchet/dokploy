@@ -57,6 +57,18 @@ export const assertHostScheduleAccess = async (
 	}
 };
 
+export const assertExecutionModeAllowed = (
+	scheduleType: Schedule["scheduleType"] | null | undefined,
+	executionMode: Schedule["executionMode"] | null | undefined,
+) => {
+	if (executionMode && executionMode !== "exec" && scheduleType !== "compose") {
+		throw new TRPCError({
+			code: "BAD_REQUEST",
+			message: "Only compose schedules can run or start a container.",
+		});
+	}
+};
+
 export const createSchedule = async (
 	input: z.infer<typeof createScheduleSchema>,
 ) => {
