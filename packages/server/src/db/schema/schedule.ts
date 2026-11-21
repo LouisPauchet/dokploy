@@ -1,5 +1,5 @@
 import { relations } from "drizzle-orm";
-import { boolean, pgEnum, pgTable, text } from "drizzle-orm/pg-core";
+import { boolean, integer, pgEnum, pgTable, text } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { nanoid } from "nanoid";
 import { z } from "zod";
@@ -51,6 +51,7 @@ export const schedules = pgTable("schedule", {
 	}),
 	enabled: boolean("enabled").notNull().default(true),
 	timezone: text("timezone"),
+	timeout: integer("timeout"),
 	createdAt: text("createdAt")
 		.notNull()
 		.$defaultFn(() => new Date().toISOString()),
@@ -81,6 +82,7 @@ export const schedulesRelations = relations(schedules, ({ one, many }) => ({
 
 export const createScheduleSchema = createInsertSchema(schedules, {
 	scheduleType: z.enum(["application", "compose", "server", "dokploy-server"]),
+	timeout: z.number().int().positive().nullable().optional(),
 }).omit({ appName: true, organizationId: true });
 
 export const updateScheduleSchema = createScheduleSchema.extend({

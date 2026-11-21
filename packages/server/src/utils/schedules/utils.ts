@@ -32,6 +32,23 @@ export const scheduleJob = (schedule: Schedule) => {
 	);
 };
 
+// coreutils `timeout` exits 124 when it sends TERM and 137 when the -k grace period forces KILL.
+const TIMEOUT_EXIT_CODES = [124, 137];
+
+const getTimeoutArgs = (timeout: number | null) =>
+	timeout ? ["timeout", "-k", "10", String(timeout)] : [];
+
+const getTimeoutMessage = (timeout: number | null) =>
+	`⏱ Timed out after ${timeout}s`;
+
+const isTimeoutError = (error: unknown) =>
+	TIMEOUT_EXIT_CODES.includes((error as { code?: number })?.code ?? 0);
+
+const getShellTimeoutCheck = (timeout: number | null, logPath: string) =>
+	timeout
+		? `case $code in 124|137) echo ${quote([getTimeoutMessage(timeout)])} >> ${quote([logPath])};; esac`
+		: "";
+
 export const removeScheduleJob = (scheduleId: string) => {
 	const currentJob = scheduledJobs[scheduleId];
 	currentJob?.cancel();
@@ -47,7 +64,9 @@ export const runCommand = async (scheduleId: string) => {
 		serviceName,
 		appName,
 		serverId,
+		timeout,
 	} = await findScheduleById(scheduleId);
+	const timeoutPrefix = getTimeoutArgs(timeout).join(" ");
 
 	const deployment = await createDeploymentSchedule({
 		scheduleId,
@@ -100,7 +119,9 @@ export const runCommand = async (scheduleId: string) => {
 					`
 					set -e
 					echo "Running scheduled command" >> ${quote([deployment.logPath])};
-					docker exec ${quote([containerId])} ${quote([shellType])} -c ${quote([command])} >> ${quote([deployment.logPath])} 2>> ${quote([deployment.logPath])} || {
+					${timeoutPrefix} docker exec ${quote([containerId])} ${quote([shellType])} -c ${quote([command])} >> ${quote([deployment.logPath])} 2>> ${quote([deployment.logPath])} || {
+						code=$?;
+						${getShellTimeoutCheck(timeout, deployment.logPath)}
 						echo "❌ Command failed" >> ${quote([deployment.logPath])};
 						exit 1;
 					}
@@ -124,19 +145,27 @@ export const runCommand = async (scheduleId: string) => {
 					writeStream.write(
 						`docker exec ${containerId} ${shellType} -c ${command}\n`,
 					);
-					await spawnAsync(
+					const [bin = "docker", ...args] = [
+						...getTimeoutArgs(timeout),
 						"docker",
-						["exec", containerId, shellType, "-c", command],
-						(data) => {
-							if (writeStream.writable) {
-								writeStream.write(data);
-							}
-						},
-					);
+						"exec",
+						containerId,
+						shellType,
+						"-c",
+						command,
+					];
+					await spawnAsync(bin, args, (data) => {
+						if (writeStream.writable) {
+							writeStream.write(data);
+						}
+					});
 
 					writeStream.write("✅ Command executed successfully\n");
 					writeStream.end();
 				} catch (error) {
+					if (isTimeoutError(error)) {
+						writeStream.write(`${getTimeoutMessage(timeout)}\n`);
+					}
 					writeStream.write("❌ Command failed\n");
 					writeStream.write(
 						error instanceof Error ? error.message : "Unknown error",
@@ -150,9 +179,15 @@ export const runCommand = async (scheduleId: string) => {
 			const { SCHEDULES_PATH } = paths();
 			const fullPath = path.join(SCHEDULES_PATH, appName || "");
 
-			await spawnAsync(
+			const [bin = "bash", ...args] = [
+				...getTimeoutArgs(timeout),
 				"bash",
-				["-c", "./script.sh"],
+				"-c",
+				"./script.sh",
+			];
+			await spawnAsync(
+				bin,
+				args,
 				async (data) => {
 					if (writeStream.writable) {
 						// we need to extract the PID and Schedule ID from the data
@@ -169,14 +204,21 @@ export const runCommand = async (scheduleId: string) => {
 				{
 					cwd: fullPath,
 				},
-			);
+			).catch((error) => {
+				if (isTimeoutError(error)) {
+					writeStream.write(`${getTimeoutMessage(timeout)}\n`);
+				}
+				throw error;
+			});
 		} else if (scheduleType === "server") {
 			const { SCHEDULES_PATH } = paths(true);
 			const fullPath = path.join(SCHEDULES_PATH, appName || "");
 			const command = `
 				set -euo pipefail
 				echo "Running script" >> ${deployment.logPath};
-				bash -c ${fullPath}/script.sh 2>&1 | tee -a ${deployment.logPath} || {
+				${timeoutPrefix} bash -c ${fullPath}/script.sh 2>&1 | tee -a ${deployment.logPath} || {
+					code=$?;
+					${getShellTimeoutCheck(timeout, deployment.logPath)}
 					echo "❌ Command failed" >> ${deployment.logPath};
 					exit 1;
 				  }
