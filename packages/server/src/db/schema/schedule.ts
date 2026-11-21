@@ -24,6 +24,8 @@ export const scheduleExecutionMode = pgEnum("scheduleExecutionMode", [
 	"start",
 ]);
 
+export const scheduleSource = pgEnum("scheduleSource", ["manual", "label"]);
+
 export const schedules = pgTable("schedule", {
 	scheduleId: text("scheduleId")
 		.notNull()
@@ -61,6 +63,7 @@ export const schedules = pgTable("schedule", {
 	enabled: boolean("enabled").notNull().default(true),
 	timezone: text("timezone"),
 	timeout: integer("timeout"),
+	source: scheduleSource("source").notNull().default("manual"),
 	createdAt: text("createdAt")
 		.notNull()
 		.$defaultFn(() => new Date().toISOString()),
@@ -93,7 +96,7 @@ export const createScheduleSchema = createInsertSchema(schedules, {
 	scheduleType: z.enum(["application", "compose", "server", "dokploy-server"]),
 	timeout: z.number().int().positive().nullable().optional(),
 	executionMode: z.enum(["exec", "run", "start"]).optional(),
-}).omit({ appName: true, organizationId: true });
+}).omit({ appName: true, organizationId: true, source: true });
 
 export const updateScheduleSchema = createScheduleSchema.extend({
 	scheduleId: z.string().min(1),

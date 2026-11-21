@@ -36,6 +36,7 @@ import { cloneGiteaRepository } from "@dokploy/server/utils/providers/gitea";
 import { cloneGithubRepository } from "@dokploy/server/utils/providers/github";
 import { cloneGitlabRepository } from "@dokploy/server/utils/providers/gitlab";
 import { getCreateComposeFileCommand } from "@dokploy/server/utils/providers/raw";
+import { syncLabelSchedules } from "@dokploy/server/utils/schedules/sync";
 import { TRPCError } from "@trpc/server";
 import { eq } from "drizzle-orm";
 import type { z } from "zod";
@@ -310,6 +311,7 @@ export const deployCompose = async ({
 		} else {
 			await execAsync(commandWithLog);
 		}
+		await syncLabelSchedules(compose, deployment.logPath);
 
 		await updateDeploymentStatus(deployment.deploymentId, "done");
 		await updateCompose(composeId, {
@@ -426,6 +428,7 @@ export const rebuildCompose = async ({
 		} else {
 			await execAsync(commandWithLog);
 		}
+		await syncLabelSchedules(compose, deployment.logPath);
 
 		await updateDeploymentStatus(deployment.deploymentId, "done");
 		await updateCompose(composeId, {
